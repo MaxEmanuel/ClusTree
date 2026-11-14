@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data Structures Make Clustering Algorithms Obsolete</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Data Structures Make Clustering Algorithms Obsolete</h1>
+  <p>The nodes of a spatial index already cluster the data. Pick a level of the tree as the initial clustering, then refine it with k-means or DBSCAN running on the tree.</p>
+</header>
+
+<div class="layout">
+  <aside>
+    <section>
+      <h2><span class="step">1</span> Data</h2>
+      <div class="row">
+        <label>Generator
+          <select id="gen-kind">
+            <option value="mixed">Blobs, varying density</option>
+            <option value="blobs">Blobs, equal</option>
+            <option value="moons">Two moons</option>
+            <option value="rings">Rings</option>
+            <option value="uniform">Uniform</option>
+          </select>
+        </label>
+        <label>Points <input id="gen-n" type="number" value="20000" min="1" max="5000000" step="1000"></label>
+      </div>
+      <div class="row">
+        <label>Clusters <input id="gen-k" type="number" value="7" min="1" max="1000"></label>
+        <label>Dim. <input id="gen-d" type="number" value="2" min="2" max="8"></label>
+        <label>Spread <input id="gen-spread" type="number" value="0.03" min="0" step="0.005"></label>
+      </div>
+      <div class="row">
+        <label>Noise share <input id="gen-noise" type="number" value="0.05" min="0" max="0.9" step="0.01"></label>
+        <label>Seed <input id="gen-seed" type="number" value="42" min="0"></label>
+        <button id="gen-go" class="primary">Generate</button>
+      </div>
+      <div class="row">
+        <label class="file">CSV upload <input id="csv-file" type="file" accept=".csv,.txt,.tsv,text/csv"></label>
+        <label class="check"><input id="csv-label" type="checkbox"> last column is a label</label>
+      </div>
+      <div class="row" id="dims-row" hidden>
+        <label>x axis <select id="dim-x"></select></label>
+        <label>y axis <select id="dim-y"></select></label>
+      </div>
+      <p class="info" id="data-info"></p>
+    </section>
+
+    <section>
+      <h2><span class="step">2</span> Index</h2>
+      <div class="row">
+        <label>Structure
+          <select id="idx-structure">
+            <option value="rstar">R*-tree</option>
+            <option value="rquadratic">R-tree, quadratic split</option>
+            <option value="rlinear">R-tree, linear split</option>
+            <option value="str">R-tree, STR bulk load</option>
+            <option value="kdtree">k-d tree</option>
+            <option value="quadtree">Quadtree</option>
+          </select>
+        </label>
+        <label>Node capacity <input id="idx-capacity" type="number" value="16" min="4" max="1024"></label>
+        <button id="idx-go" class="primary">Build</button>
+      </div>
+      <p class="info" id="index-info"></p>
+    </section>
+
+    <section>
+      <h2><span class="step">3</span> Initial clustering: a tree level</h2>
+      <label class="wide">Depth <span id="depth-label"></span>
+        <input id="depth" type="range" min="0" max="0" value="0">
+      </label>
+      <div class="row">
+        <label>Rectangles
+          <select id="show-mbr">
+            <option value="cut">Selected level</option>
+            <option value="all">All levels above</option>
+            <option value="off">Hidden</option>
+          </select>
+        </label>
+        <label>Colour points by
+          <select id="color-by">
+            <option value="partition">Tree level</option>
+            <option value="run">Selected run</option>
+            <option value="truth">Ground truth</option>
+            <option value="none">Nothing</option>
+          </select>
+        </label>
+      </div>
+      <button id="record-partition">Record this level as a run</button>
+    </section>
+
+    <section>
+      <h2><span class="step">4</span> Cluster further</h2>
+      <h3>k-means</h3>
+      <div class="row">
+        <label>k <input id="km-k" type="number" value="7" min="1"></label>
+        <label>Seed <input id="km-seed" type="number" value="1" min="0"></label>
+      </div>
+      <div class="buttons">
+        <button data-method="kmeans-tree" title="Weighted k-means over the centroids of the nodes at the selected depth; every point inherits the cluster of its node.">On tree nodes</button>
+        <button data-method="kmeans-tree-seeded" title="k-means over the node centroids, then Lloyd iterations over the points starting from those centres.">Tree nodes, then points</button>
+        <button data-method="kmeans-baseline" title="k-means++ and Lloyd's algorithm on the raw points, no index.">Conventional</button>
+      </div>
+      <h3>DBSCAN</h3>
+      <div class="row">
+        <label>eps <input id="db-eps" type="number" value="0.02" min="0" step="0.001"></label>
+        <label>minPts <input id="db-minpts" type="number" value="10" min="1"></label>
+      </div>
+      <div class="buttons">
+        <button data-method="dbscan-tree-dense" title="Exact DBSCAN. Subtrees with a diagonal of at most eps and at least minPts points are core points of one cluster and need no neighbourhood query.">Dense subtrees (exact)</button>
+        <button data-method="dbscan-nodes" title="Approximate DBSCAN over the nodes at the selected depth, without point-to-point distances.">On tree nodes (approx.)</button>
+        <button data-method="dbscan-index" title="Exact DBSCAN with one index-supported eps-query per point.">Conventional, with index</button>
+        <button data-method="dbscan-baseline" title="Exact DBSCAN without index: quadratic run time.">Conventional, no index</button>
+      </div>
+      <button id="run-all" class="primary">Run all and compare</button>
+    </section>
+
+    <section>
+      <h2><span class="step">5</span> Query the index</h2>
+      <div class="tools" role="radiogroup" aria-label="Mouse tool">
+        <button data-tool="pan" class="active" title="Drag to pan, wheel to zoom">Pan</button>
+        <button data-tool="range" title="Drag a rectangle: range query">Range</button>
+        <button data-tool="knn" title="Click: k nearest neighbours">kNN</button>
+        <button data-tool="radius" title="Click: all points within eps (the DBSCAN neighbourhood)">eps-ball</button>
+        <button data-tool="insert" title="Click: insert points into the index">Insert</button>
+      </div>
+      <div class="row">
+        <label>k (kNN) <input id="q-k" type="number" value="25" min="1"></label>
+        <label>Points per click <input id="ins-count" type="number" value="20" min="1" max="2000"></label>
+      </div>
+      <p class="info" id="query-info">Wheel zooms, drag pans. Double-click resets the view.</p>
+    </section>
+  </aside>
+
+  <main>
+    <div class="canvas-wrap">
+      <canvas id="canvas" tabindex="0" aria-label="Scatter plot of the data set with the bounding rectangles of the index nodes"></canvas>
+      <div id="hover" class="hover"></div>
+      <div id="legend" class="legend"></div>
+      <div id="busy" class="busy" hidden>working…</div>
+    </div>
+    <div class="runs">
+      <div class="runs-head">
+        <h2>Runs</h2>
+        <span class="info">Click a run to display it. “ARI vs. selected” compares every run with the displayed one. Total = index build + clustering.</span>
+        <button id="clear-runs">Clear</button>
+      </div>
+      <div class="table-scroll">
+        <table id="runs">
+          <thead><tr>
+            <th>#</th><th>Method</th><th>Index</th><th>Parameters</th>
+            <th class="num">Clusters</th><th class="num">Noise</th><th class="num">SSE</th>
+            <th class="num">ARI vs. truth</th><th class="num">ARI vs. selected</th>
+            <th class="num">Build ms</th><th class="num">Cluster ms</th><th class="num">Total ms</th>
+            <th>Work</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+<div id="toast" class="toast" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>
